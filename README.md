@@ -1,6 +1,6 @@
 # Secure Microservices Reference
 
-A production-realistic microservices platform built with Java 21 and Spring Boot 4.1, demonstrating secure identity, caching, and clean API design patterns used in real enterprise systems.
+A production-inspired microservices reference platform built with Java 21 and Spring Boot 4.1, demonstrating secure identity, service discovery, caching, persistence, and clean API design patterns.
 
 ---
 
