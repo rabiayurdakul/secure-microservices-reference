@@ -1,0 +1,69 @@
+spring:
+  application:
+    name: edge-gateway
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/demo}
+
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: auth-public
+              uri: lb://authentication-service
+              predicates:
+                - Path=/api/v1/public/**
+
+            - id: auth-profile
+              uri: lb://authentication-service
+              predicates:
+                - Path=/api/v1/me
+
+            - id: auth-admin
+              uri: lb://authentication-service
+              predicates:
+                - Path=/api/v1/admin/**
+
+            - id: catalog-list
+              uri: lb://catalog-data-service
+              predicates:
+                - Path=/api/v1/books
+                - Method=GET
+
+            - id: catalog-cache-read
+              uri: lb://catalog-cache-service
+              predicates:
+                - Path=/api/v1/books/{id}
+                - Method=GET
+
+            - id: catalog-cache-evict
+              uri: lb://catalog-cache-service
+              predicates:
+                - Path=/api/v1/books/{id}/cache
+                - Method=DELETE
+
+            - id: catalog-data-write
+              uri: lb://catalog-data-service
+              predicates:
+                - Path=/api/v1/books/**
+                - Method=POST,PUT,PATCH,DELETE
+
+server:
+  port: ${SERVER_PORT:8088}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway

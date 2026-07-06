@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "da47f6e3-d45d-40d8-b23b-05699eb5083c",
-    "name": "Secure Microservices Reference",
-    "description": "Full test suite for authentication-service, catalog-data-service, and catalog-cache-service.",
+    "name": "Secure Microservices Reference - Edge Gateway",
+    "description": "Full test suite for secure microservices reference. Includes edge-gateway as the recommended entry point, plus direct service folders for debugging.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "1692780"
   },
@@ -77,7 +77,661 @@
       ]
     },
     {
-      "name": "2. Authentication Service",
+      "name": "2. Edge Gateway (Recommended Entry Point)",
+      "description": "Use these requests for the normal external API flow. Direct service folders are kept for debugging.",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/actuator/health",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Gateway status UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Auth Public Health via Gateway",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/public/health",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "public",
+                "health"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User via Gateway",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/me",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has userId', () => pm.expect(pm.response.json().userId).to.not.be.empty);",
+                  "pm.test('Has username', () => pm.expect(pm.response.json().username).to.eql('testuser'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User via Gateway - No Token (expect 401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/me",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Ping via Gateway",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/admin/ping",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "ping"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Pong received', () => pm.expect(pm.response.text()).to.include('pong'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Book via Gateway (with Idempotency-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{GATEWAY_IDEMPOTENCY_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Clean Code\",\n  \"author\": \"Robert Martin\",\n  \"isbn\": \"{{GATEWAY_TEST_ISBN}}\",\n  \"publishedYear\": 2008\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const suffix = Date.now().toString();",
+                  "pm.collectionVariables.set('GATEWAY_IDEMPOTENCY_KEY', `gateway-postman-${suffix}`);",
+                  "pm.collectionVariables.set('GATEWAY_TEST_ISBN', `gw-${suffix}`);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('BOOK_ID', json.id);",
+                  "pm.test('Title correct', () => pm.expect(json.title).to.eql('Clean Code'));",
+                  "pm.test('ID saved', () => pm.expect(json.id).to.not.be.empty);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Book via Gateway - Same Idempotency-Key (expect replay)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{GATEWAY_IDEMPOTENCY_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Clean Code\",\n  \"author\": \"Robert Martin\",\n  \"isbn\": \"{{GATEWAY_TEST_ISBN}}\",\n  \"publishedYear\": 2008\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 (replayed)', () => pm.response.to.have.status(201));",
+                  "pm.test('Idempotent-Replayed header present', () => pm.expect(pm.response.headers.get('Idempotent-Replayed')).to.eql('true'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Book via Gateway - No Token (expect 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Clean Code\",\n  \"author\": \"Robert Martin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Book via Gateway - Invalid Body (expect 400 + RFC 7807)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "gateway-validation-test"
+              }
+            ],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"author\": \"Robert Martin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test('RFC 7807 title present', () => pm.expect(json.title).to.eql('Validation Error'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Books via Gateway",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books?page=0&size=10&sort=createdAt,desc",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                },
+                {
+                  "key": "sort",
+                  "value": "createdAt,desc"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has content array', () => pm.expect(json.content).to.be.an('array'));",
+                  "pm.test('Has pagination fields', () => {",
+                  "  pm.expect(json.totalElements).to.be.a('number');",
+                  "  pm.expect(json.totalPages).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Books via Gateway (filter by author)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books?author=Robert Martin&page=0&size=10",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books"
+              ],
+              "query": [
+                {
+                  "key": "author",
+                  "value": "Robert Martin"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Results match author', () => {",
+                  "  json.content.forEach(book => pm.expect(book.author).to.eql('Robert Martin'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Book via Gateway - Cache MISS (first request)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books/{{BOOK_ID}}",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "{{BOOK_ID}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Title correct', () => pm.expect(pm.response.json().title).to.eql('Clean Code'));",
+                  "console.log('Gateway response time (MISS):', pm.response.responseTime + 'ms');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Book via Gateway - Cache HIT (second request)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books/{{BOOK_ID}}",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "{{BOOK_ID}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Title correct', () => pm.expect(pm.response.json().title).to.eql('Clean Code'));",
+                  "console.log('Gateway response time (HIT):', pm.response.responseTime + 'ms');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Book via Gateway - Not Found (expect 404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Evict Cache via Gateway",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books/{{BOOK_ID}}/cache",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "{{BOOK_ID}}",
+                "cache"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Book via Gateway After Evict - Cache MISS again",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{EDGE_GATEWAY_URL}}/api/v1/books/{{BOOK_ID}}",
+              "host": [
+                "{{EDGE_GATEWAY_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "books",
+                "{{BOOK_ID}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "console.log('Gateway response time after evict (MISS again):', pm.response.responseTime + 'ms');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Authentication Service (Direct Debug)",
       "item": [
         {
           "name": "Health (public - no token)",
@@ -218,7 +872,7 @@
       ]
     },
     {
-      "name": "3. Catalog Data Service",
+      "name": "4. Catalog Data Service (Direct Debug)",
       "item": [
         {
           "name": "Create Book (with Idempotency-Key)",
@@ -629,7 +1283,7 @@
       ]
     },
     {
-      "name": "4. Catalog Cache Service",
+      "name": "5. Catalog Cache Service (Direct Debug)",
       "item": [
         {
           "name": "Get Book - Cache MISS (first request)",
@@ -804,6 +1458,10 @@
       "value": "http://localhost:8080"
     },
     {
+      "key": "EDGE_GATEWAY_URL",
+      "value": "http://localhost:8088"
+    },
+    {
       "key": "AUTH_SERVICE_URL",
       "value": "http://localhost:8081"
     },
@@ -821,6 +1479,14 @@
     },
     {
       "key": "BOOK_ID",
+      "value": ""
+    },
+    {
+      "key": "GATEWAY_IDEMPOTENCY_KEY",
+      "value": ""
+    },
+    {
+      "key": "GATEWAY_TEST_ISBN",
       "value": ""
     }
   ]

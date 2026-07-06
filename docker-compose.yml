@@ -121,6 +121,29 @@ services:
     ports:
       - "8761:8761"
 
+  edge-gateway:
+    build:
+      context: ./edge-gateway
+    container_name: edge-gateway
+    environment:
+      SERVER_PORT: 8088
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/demo
+      EUREKA_DEFAULT_ZONE: http://discovery-server:8761/eureka/
+    ports:
+      - "8088:8088"
+    depends_on:
+      discovery-server:
+       condition: service_started
+      keycloak:
+       condition: service_started
+      authentication-service:
+        condition: service_started
+      catalog-data-service:
+        condition: service_started
+      catalog-cache-service:
+        condition: service_started
+    restart: on-failure
+
   redis:
     image: redis:7-alpine
     ports:

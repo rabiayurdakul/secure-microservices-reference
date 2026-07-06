@@ -1,41 +1,72 @@
 # Secure Microservices Reference
 
-A production-realistic microservices platform built with Java 21 and Spring Boot 4.1, demonstrating secure identity, caching, and clean API design patterns used in real enterprise systems.
+A production-inspired microservices reference project built with Java 21 and Spring Boot 4.1. It demonstrates secure identity, API gateway routing, service discovery, persistence, Redis caching, and a small but realistic service-to-service flow.
+
+The goal of this repository is not to be a full production platform. It is a practical backend reference that shows how the main building blocks fit together in a secure Spring Boot microservices setup.
 
 ---
 
 ## Architecture Overview
 
+```text
+                         ┌──────────────────────────────────────┐
+                         │              Client / Postman          │
+                         └──────────────────┬───────────────────┘
+                                            │
+                                            ▼
+                         ┌──────────────────────────────────────┐
+                         │          edge-gateway (8088)          │
+                         │   Routing, JWT validation, API edge   │
+                         └───────────────┬──────────────┬───────┘
+                                         │              │
+                         ┌───────────────┘              └────────────────┐
+                         ▼                                               ▼
+          ┌──────────────────────────┐                    ┌──────────────────────────┐
+          │ authentication-service   │                    │ catalog-cache-service    │
+          │        (8081)             │                    │        (8083)             │
+          │ /me, /admin/ping, RBAC    │                    │ Cache-aside reads         │
+          └─────────────┬────────────┘                    └─────────────┬────────────┘
+                        │                                               │
+                        │                                               ▼
+                        │                                  ┌──────────────────────────┐
+                        │                                  │          Redis            │
+                        │                                  │      cache store          │
+                        │                                  └──────────────────────────┘
+                        │
+                        │                                  ┌──────────────────────────┐
+                        └─────────────────────────────────►│ catalog-data-service     │
+                                                           │        (8082)             │
+                                                           │ CRUD, pagination, Flyway  │
+                                                           └─────────────┬────────────┘
+                                                                         │
+                                                                         ▼
+                                                           ┌──────────────────────────┐
+                                                           │        PostgreSQL         │
+                                                           │        catalog DB         │
+                                                           └──────────────────────────┘
+
+          ┌──────────────────────────┐
+          │      Keycloak (8080)      │  Issues JWT access tokens
+          │ OAuth2 / JWT provider     │  used by the gateway and protected services
+          └──────────────────────────┘
+
+          ┌──────────────────────────┐
+          │ discovery-server (8761)   │  Eureka registry
+          │ Service registration      │  used by the gateway for lb:// service routing
+          └──────────────────────────┘
 ```
-                        ┌─────────────────────────────────────┐
-                        │            Keycloak (8080)           │
-                        │      OAuth2 / JWT Identity Provider  │
-                        └────────────────┬────────────────────┘
-                                         │ issues JWT tokens
-                   ┌─────────────────────┼─────────────────────┐
-                   │                     │                      │
-          ┌────────▼────────┐   ┌────────▼────────┐   ┌────────▼────────┐
-          │  auth-service   │   │ catalog-data    │   │ catalog-cache   │
-          │   (port 8081)   │   │   (port 8082)   │   │  (port 8083)    │
-          │                 │   │                 │   │                 │
-          │ - /me           │   │ - CRUD books    │   │ - Cache-aside   │
-          │ - /admin/ping   │   │ - Pagination    │   │   with Redis    │
-          │ - RBAC roles    │   │ - Idempotency   │   │ - TTL: 5 min   │
-          └─────────────────┘   └────────┬────────┘   └────────┬────────┘
-                                         │                      │
-                                ┌────────▼────────┐   ┌────────▼────────┐
-                                │   PostgreSQL    │   │      Redis      │
-                                │  (catalog DB)   │   │  (cache store)  │
-                                └─────────────────┘   └─────────────────┘
-```
 
-**Service responsibilities at a glance:**
+## Services
 
-`authentication-service` demonstrates Keycloak/OAuth2 integration, JWT validation via Spring Security's native resource server support, and role-based access control (`@PreAuthorize`).
+`edge-gateway` is the main entry point for API traffic. It routes requests to downstream services through Eureka and validates JWT access tokens at the edge.
 
-`catalog-data-service` demonstrates domain-driven REST API design: contract-first OpenAPI spec, pagination/sort/filter, idempotency guards for safe retries, RFC 7807 problem-details error model, and versioned schema migrations with Flyway.
+`authentication-service` demonstrates Keycloak/OAuth2 integration, JWT validation with Spring Security resource server support, and role-based access control.
 
-`catalog-cache-service` demonstrates the cache-aside pattern with Redis: on a cache miss the service fetches from `catalog-data-service`, writes to Redis with a configurable TTL (default 5 minutes), and serves subsequent requests entirely from the cache — with measurable latency improvement.
+`catalog-data-service` owns the book catalog data. It includes REST endpoints, pagination, sorting, filtering, idempotency handling for safe retries, RFC 7807-style error responses, OpenAPI documentation with springdoc, and Flyway migrations.
+
+`catalog-cache-service` demonstrates the cache-aside pattern with Redis. On a cache miss, it fetches from `catalog-data-service`, writes the result to Redis with a configurable TTL, and serves later reads from cache.
+
+`discovery-server` runs Eureka so services can register themselves and the gateway can route using logical service names instead of fixed host/port pairs.
 
 ---
 
@@ -44,26 +75,28 @@ A production-realistic microservices platform built with Java 21 and Spring Boot
 | Layer | Technology |
 |---|---|
 | Language | Java 21 |
-| Framework | Spring Boot 4.1, Spring Security, Spring Cloud Gateway |
+| Framework | Spring Boot 4.1, Spring Security |
+| API Gateway | Spring Cloud Gateway Server MVC |
+| Service Discovery | Eureka / Spring Cloud Netflix |
 | Identity | Keycloak 26, OAuth2, JWT |
 | Persistence | PostgreSQL 16, Spring Data JPA, Flyway |
 | Caching | Redis 7, Lettuce client |
-| API | REST, OpenAPI 3 / Swagger UI (springdoc) |
-| HTTP Client | Spring 6 `HttpExchange` (declarative, no Feign dependency) |
-| Service Discovery | Eureka (Spring Cloud Netflix) |
+| API Docs | OpenAPI 3 / Swagger UI with springdoc |
+| HTTP Client | Spring RestClient |
 | Containerisation | Docker, Docker Compose |
-| Testing | JUnit 5, Mockito, Testcontainers (real Postgres + Redis) |
+| Testing | JUnit 5, Mockito, Testcontainers |
 | Build | Maven |
 
 ---
 
 ## Prerequisites
 
-- Docker Desktop (running)
+- Docker Desktop running
 - Java 21+
 - Maven 3.9+
+- `jq` for the curl examples that extract the access token
 
-No other local setup required — Keycloak, PostgreSQL, Redis, and Eureka all start via Docker Compose.
+Keycloak, PostgreSQL, Redis, Eureka, the gateway, and all Spring Boot services are started through Docker Compose.
 
 ---
 
@@ -72,44 +105,55 @@ No other local setup required — Keycloak, PostgreSQL, Redis, and Eureka all st
 ```bash
 git clone https://github.com/rabiayurdakul/secure-microservices-reference.git
 cd secure-microservices-reference
-docker-compose up --build
+docker compose up --build
 ```
 
-Wait for all services to become healthy (approximately 60–90 seconds on first run — Maven downloads dependencies inside the build containers). You will see each service log `Started <ServiceName>Application` when ready.
+The first run can take a little longer because Maven dependencies are downloaded inside the build containers. Wait until the Spring services log that they have started.
 
-> **Note:** Some services (particularly `authentication-service` and `catalog-cache-service`) may restart once or twice before becoming healthy. This is expected — they start before Keycloak is fully ready and retry automatically via `restart: on-failure`. This is not an error; within 30–60 seconds all services stabilise.
-
-**Service endpoints once running:**
+**Main URLs**
 
 | Service | URL |
 |---|---|
-| Keycloak Admin | http://localhost:8080 (admin / admin) |
-| Authentication Service | http://localhost:8081 |
-| Catalog Data Service | http://localhost:8082/swagger-ui.html |
-| Catalog Cache Service | http://localhost:8083 |
+| Edge Gateway | http://localhost:8088 |
+| Keycloak Admin | http://localhost:8080 |
 | Eureka Dashboard | http://localhost:8761 |
+| Authentication Service | http://localhost:8081 |
+| Catalog Data Service / Swagger | http://localhost:8082/swagger-ui.html |
+| Catalog Cache Service | http://localhost:8083 |
+
+Use `edge-gateway` for normal API access. The direct service ports are exposed mainly for debugging and local inspection.
+
+Demo credentials:
+
+```text
+Keycloak admin: admin / admin
+Demo user:      testuser / password
+Client:         demo-client / demo-secret
+```
 
 ---
 
 ## Running Tests
 
-Each service has its own test suite. To run all tests:
+Each service has its own test suite.
 
 ```bash
-cd authentication-service && mvn test
+cd discovery-server && mvn test
+cd ../authentication-service && mvn test
 cd ../catalog-data-service && mvn test
 cd ../catalog-cache-service && mvn test
+cd ../edge-gateway && mvn test
 ```
 
-Tests use **Testcontainers** — real PostgreSQL and Redis containers spin up automatically per test run, no mocking of infrastructure. Docker must be running.
+The catalog services use Testcontainers so integration tests run against real PostgreSQL and Redis containers. Docker must be running.
 
 ---
 
 ## API Walkthrough
 
-### 1. Get an Access Token
+The examples below use the gateway on port `8088`, which is the preferred way to call the system.
 
-All write operations and protected endpoints require a JWT issued by Keycloak. A pre-configured test user is included in the realm export:
+### 1. Get an access token
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/realms/demo/protocol/openid-connect/token \
@@ -120,159 +164,194 @@ TOKEN=$(curl -s -X POST http://localhost:8080/realms/demo/protocol/openid-connec
   -d "password=password" | jq -r .access_token)
 ```
 
-### 2. Authentication Service
+### 2. Authentication through the gateway
 
 ```bash
-# Public — no token required
-curl http://localhost:8081/api/v1/public/health
+# Public endpoint
+curl http://localhost:8088/api/v1/public/health
 
-# Authenticated — returns claims from the validated JWT
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8081/api/v1/me
+# Authenticated endpoint
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8088/api/v1/me
 
-# Role-protected — testuser has ADMIN role in the demo realm
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8081/api/v1/admin/ping
+# Admin-protected endpoint
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8088/api/v1/admin/ping
 ```
 
-### 3. Catalog Data Service
+### 3. Catalog write flow
 
 ```bash
-# Create a book — Idempotency-Key prevents duplicate on retry
-curl -X POST http://localhost:8082/api/v1/books \
+# Create a book
+curl -i -X POST http://localhost:8088/api/v1/books \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: my-unique-key-001" \
   -d '{"title":"Clean Code","author":"Robert Martin","isbn":"9780132350884","publishedYear":2008}'
-
-# Retry with the same key — returns the original response, no duplicate created
-# Response includes header: Idempotent-Replayed: true
-curl -X POST http://localhost:8082/api/v1/books \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: my-unique-key-001" \
-  -d '{"title":"Clean Code","author":"Robert Martin","isbn":"9780132350884","publishedYear":2008}'
-
-# List with pagination, sorting, and filtering
-curl "http://localhost:8082/api/v1/books?author=Robert+Martin&page=0&size=10&sort=title,asc"
-
-# RFC 7807 problem-details on validation failure (missing required title)
-curl -X POST http://localhost:8082/api/v1/books \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"author":"Someone"}'
 ```
 
-### 4. Catalog Cache Service — Cache-Aside Demo
+The response contains the created book id. Save it for the cache demo:
 
 ```bash
 BOOK_ID=<id-from-create-response>
+```
 
-# First request — cache MISS, fetches from catalog-data-service (~50-200ms)
-time curl http://localhost:8083/api/v1/books/$BOOK_ID
+Retrying with the same `Idempotency-Key` returns the original response instead of creating a duplicate:
 
-# Second request — cache HIT, served from Redis (~1-5ms)
-time curl http://localhost:8083/api/v1/books/$BOOK_ID
+```bash
+curl -i -X POST http://localhost:8088/api/v1/books \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: my-unique-key-001" \
+  -d '{"title":"Clean Code","author":"Robert Martin","isbn":"9780132350884","publishedYear":2008}'
+```
 
-# Verify the entry in Redis directly
-redis-cli GET "book:$BOOK_ID"
+### 4. Catalog read and cache-aside flow
+
+```bash
+# List books with pagination and sorting
+curl "http://localhost:8088/api/v1/books?page=0&size=10&sort=createdAt,desc"
+
+# First request: cache MISS, loads from catalog-data-service
+curl -i http://localhost:8088/api/v1/books/$BOOK_ID
+
+# Second request: cache HIT, served from Redis
+curl -i http://localhost:8088/api/v1/books/$BOOK_ID
 
 # Evict the cache entry
-curl -X DELETE http://localhost:8083/api/v1/books/$BOOK_ID/cache
+curl -i -X DELETE http://localhost:8088/api/v1/books/$BOOK_ID/cache \
+  -H "Authorization: Bearer $TOKEN"
 
-# Next request is a MISS again — proves eviction worked
-time curl http://localhost:8083/api/v1/books/$BOOK_ID
+# Next request becomes a MISS again
+curl -i http://localhost:8088/api/v1/books/$BOOK_ID
+```
+
+### 5. A couple of failure cases
+
+```bash
+# No token on protected write endpoint: expect 401
+curl -i -X POST http://localhost:8088/api/v1/books \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Clean Code","author":"Robert Martin"}'
+
+# Validation failure: expect 400 problem response
+curl -i -X POST http://localhost:8088/api/v1/books \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: validation-test-001" \
+  -d '{"author":"Robert Martin"}'
+
+# Missing book: expect 404 problem response
+curl -i http://localhost:8088/api/v1/books/00000000-0000-0000-0000-000000000000
 ```
 
 ---
 
-## Key Design Decisions
+## Design Notes
 
-**Why `HttpExchange` instead of Feign for the inter-service client?**
-Spring 6 ships a native declarative HTTP client (`@HttpExchange`) that gives the same clean interface style as Feign without pulling in a Spring Cloud dependency just for HTTP calls. This is the approach now recommended in Spring's own documentation.
+**Why an edge gateway?**
 
-**Why `service_healthy` conditions in Docker Compose?**
-`depends_on` without a health condition only waits for the container to start, not for the process inside it to be ready. Flyway migrations fail if they run before Postgres is accepting connections. Using `condition: service_healthy` with each database's `pg_isready` healthcheck guarantees migrations run against a ready database.
+The gateway gives clients one stable entry point. It keeps internal service locations out of the client, centralises routing rules, validates JWTs at the edge, and uses Eureka to route by service name.
 
-**Why is cache TTL 5 minutes?**
-Book catalog data (title, author, ISBN) changes infrequently. A 5-minute TTL allows the cache to absorb repeated reads while keeping staleness acceptable. For higher-churn data (stock levels, prices) a shorter TTL or event-driven invalidation via Kafka would be more appropriate.
+**Why Spring Cloud Gateway Server MVC?**
 
-**Why are read endpoints on `catalog-data-service` public (no auth required)?**
-This is an intentional contrast with `authentication-service`, where all endpoints require a token. A public catalog browsing API is a common real-world pattern — it demonstrates granular security configuration rather than "lock everything or lock nothing."
+The other services in this project use Spring MVC, so Gateway Server MVC keeps the programming model consistent while still showing API gateway routing, load-balanced service lookup, and edge security.
 
-**Why does the idempotency filter return the original response on replay rather than an error?**
-The Stripe/PayPal pattern: a client that timed out and retried does not know whether its original request succeeded. Returning the original `201 Created` response (with `Idempotent-Replayed: true` header) gives the client a definitive answer without creating a duplicate. An error response would leave the client's state uncertain.
+**Why Eureka?**
 
-**Why is there an index on `books.author`?**
-The list endpoint supports filtering by author (`?author=Robert Martin`). Without an index, every filter request performs a full table scan. Adding `idx_books_author` in the Flyway migration makes the intent explicit and version-controlled — the same way a production team would ship a performance change: as a reviewed, numbered migration, not a silent schema alteration.
+Eureka lets services register themselves and lets the gateway route with names like `lb://catalog-data-service` instead of hard-coded container addresses. In a small demo this may look like extra infrastructure, but it makes the routing model closer to a real microservice setup.
 
-**Why does the cache-aside service not cache a "not found" result?**
-Four scenarios are handled deliberately:
-- **Cache HIT** → return from Redis, never call `catalog-data-service`.
-- **Cache MISS, data found** → call `catalog-data-service`, write result to Redis with TTL, return response.
-- **Cache MISS, data not found** → call `catalog-data-service`, return 404, **do not write to Redis**. Caching an empty result would mean a legitimate book created moments later would still return 404 for the remainder of the TTL.
-- **Evict** → delete the Redis key; the next request becomes a MISS and fetches fresh data.
+**Why RestClient instead of Feign?**
 
-**Why Testcontainers instead of H2 for integration tests?**
-H2's SQL dialect differs subtly from PostgreSQL. Running tests against the same database engine used in production catches issues (index behaviour, UUID generation, Flyway dialect) that an in-memory substitute would miss.
+The cache service only needs a small synchronous internal call to `catalog-data-service`. Spring's `RestClient` keeps that simple without adding Feign just for one client.
+
+**Why `service_healthy` in Docker Compose?**
+
+`depends_on` by itself only waits until a container starts. It does not mean the process inside is ready. The catalog service runs Flyway migrations on startup, so PostgreSQL needs to be accepting connections first.
+
+**Why cache TTL is 5 minutes?**
+
+Book catalog data does not change often. A five-minute TTL is enough to show the cache-aside pattern without keeping stale data around for too long. For frequently changing data, a shorter TTL or event-driven invalidation would be safer.
+
+**Why not cache missing books?**
+
+The cache service deliberately does not cache 404 responses. If a book is created shortly after a failed lookup, caching the miss would keep returning 404 until the TTL expires.
+
+**Why Testcontainers instead of H2?**
+
+The project uses PostgreSQL in runtime, so tests should catch PostgreSQL-specific behavior as early as possible. H2 is useful for simple tests, but it can hide dialect and migration problems.
 
 ---
 
 ## Postman Collection
 
-A ready-to-run Postman collection covering all endpoints and scenarios (idempotency replay, cache hit/miss timing, RFC 7807 errors, 401 enforcement) is included at the root of the repository:
+A Postman collection is included for the main scenarios: token retrieval, gateway calls, idempotency replay, cache hit/miss behavior, validation errors, 401 checks, and direct-service debug requests.
 
-```
-secure-microservices-reference.postman_collection.json
+```text
+Secure_Microservices_Reference_Edge_Gateway.postman_collection.json
 ```
 
-Import it into Postman and run **"Get Token"** first — the collection automatically stores the JWT and the created book ID in collection variables, so all subsequent requests are pre-wired.
+Import the collection, run **Get Token** first, then run the **Edge Gateway** folder for the normal API flow. The direct service folders are there for debugging.
 
 ---
 
 ## Project Structure
 
-```
+```text
 secure-microservices-reference/
 ├── docker-compose.yml
 ├── keycloak/
-│   └── realm-export.json          # auto-imported on first start
+│   └── realm-export.json
+├── discovery-server/
+│   ├── Dockerfile
+│   └── src/
+│       └── main/java/.../
+│           └── DiscoveryServerApplication
+├── edge-gateway/
+│   ├── Dockerfile
+│   └── src/
+│       └── main/java/.../
+│           ├── EdgeGatewayApplication
+│           └── config/
+│               └── SecurityConfig
 ├── authentication-service/
 │   ├── Dockerfile
 │   └── src/
 │       └── main/java/.../
-│           ├── config/            # SecurityConfig, KeycloakRoleProperties
-│           ├── controller/        # ProfileController, HealthController, AdminController
-│           └── converter/         # JwtAuthConverter (Keycloak role extraction)
+│           ├── config/
+│           ├── controller/
+│           └── converter/
 ├── catalog-data-service/
 │   ├── Dockerfile
 │   └── src/
 │       └── main/
 │           ├── java/.../
-│           │   ├── config/        # SecurityConfig, OpenApiConfig
-│           │   ├── controller/    # BookController
-│           │   ├── service/       # BookService
-│           │   ├── repository/    # BookRepository, IdempotencyKeyRepository
-│           │   ├── entity/        # Book, IdempotencyKeyRecord
-│           │   ├── dto/           # BookResponse, CreateBookRequest, PagedResponse
-│           │   ├── filter/        # IdempotencyFilter
-│           │   └── exception/     # GlobalExceptionHandler, BookNotFoundException
+│           │   ├── config/
+│           │   ├── controller/
+│           │   ├── service/
+│           │   ├── repository/
+│           │   ├── entity/
+│           │   ├── dto/
+│           │   ├── filter/
+│           │   └── exception/
 │           └── resources/
-│               └── db/migration/  # V1__create_books_table.sql, V2__create_idempotency_keys_table.sql
+│               └── db/migration/
 └── catalog-cache-service/
     ├── Dockerfile
     └── src/
         └── main/java/.../
-            ├── config/            # RedisConfig, ClientConfig
-            ├── controller/        # BookCacheController
-            ├── service/           # BookCacheService
-            ├── client/            # CatalogDataClient (HttpExchange)
-            ├── dto/               # BookResponse
-            └── exception/         # GlobalExceptionHandler, BookNotFoundException
+            ├── config/
+            ├── controller/
+            ├── service/
+            ├── client/
+            ├── response/
+            └── exception/
 ```
 
 ---
 
 ## About
 
-Built by [Rabia Yurdakul Telef](https://www.linkedin.com/in/rabia-yurdakul-telef-889196a7) — Senior Java Backend Engineer (8+ years) specialising in Spring Boot microservices, Keycloak/OAuth2, and Redis performance engineering.
+Built by [Rabia Yurdakul Telef](https://www.linkedin.com/in/rabia-yurdakul-telef-889196a7), a Java backend engineer focused on Spring Boot microservices, OAuth2/JWT security, Keycloak, Redis, and production-style backend architecture.
 
-Available for outside-IR35 contracts across the UK (remote/hybrid). [GitHub](https://github.com/rabiayurdakul) · [Udemy](https://www.udemy.com/user/rabia-yurdakul-telef-3/)
+[GitHub](https://github.com/rabiayurdakul) · [Udemy](https://www.udemy.com/user/rabia-yurdakul-telef-3/)
