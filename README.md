@@ -1,6 +1,5 @@
 # Secure Microservices Reference
 
-<<<<<<< HEAD
 A production-inspired microservices reference project built with Java 21 and Spring Boot 4.1. It demonstrates secure identity, API gateway routing, service discovery, persistence, Redis caching, and a small but realistic service-to-service flow.
 
 The goal of this repository is not to be a full production platform. It is a practical backend reference that shows how the main building blocks fit together in a secure Spring Boot microservices setup.
